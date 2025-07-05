@@ -9,14 +9,13 @@ import {
   XCircle,
   Eye,
   Clock,
-  RefreshCw,
-  Bug
+  RefreshCw
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { getShops, supabase } from '../../lib/supabase';
-import { debugShopVisibility, testAdminAccess } from '../../lib/Debug';
+// Removed: import { debugShopVisibility, testAdminAccess } from '../../lib/Debug';
 import { Shop } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -26,7 +25,7 @@ export const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [debugMode, setDebugMode] = useState(false);
+  // Removed: const [debugMode, setDebugMode] = useState(false);
   const [stats, setStats] = useState({
     totalShops: 0,
     pendingApprovals: 0,
@@ -149,14 +148,15 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleDebug = async () => {
-    setDebugMode(true);
-    console.log('Starting debug mode...');
-    await debugShopVisibility();
-    await testAdminAccess();
-    toast.success('Debug information logged to console');
-    setDebugMode(false);
-  };
+  // Removed: handleDebug function
+  // const handleDebug = async () => {
+  //   setDebugMode(true);
+  //   console.log('Starting debug mode...');
+  //   await debugShopVisibility();
+  //   await testAdminAccess();
+  //   toast.success('Debug information logged to console');
+  //   setDebugMode(false);
+  // };
 
   const handleApproveShop = async (shopId: string) => {
     try {
@@ -237,6 +237,7 @@ export const AdminDashboard: React.FC = () => {
               <p className="text-gray-600">Manage shopkeepers and monitor platform activity</p>
             </div>
             <div className="flex space-x-3">
+              {/* Removed: Debug Button */}
               {/* <Button
                 onClick={handleDebug}
                 variant="outline"
@@ -259,15 +260,15 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* Debug Info */}
-        {debugMode && (
+        {/* Removed: Debug Info Card */}
+        {/* {debugMode && (
           <Card className="mb-6 p-4 bg-yellow-50 border-yellow-200">
             <h3 className="text-sm font-medium text-yellow-800 mb-2">Debug Mode Active</h3>
             <p className="text-sm text-yellow-700">
               Check the browser console for detailed debugging information.
             </p>
           </Card>
-        )}
+        )} */}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -313,6 +314,7 @@ export const AdminDashboard: React.FC = () => {
                 <Store className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No shops yet</h3>
                 <p className="text-gray-600 mb-4">Shop applications will appear here once shopkeepers create them</p>
+                {/* Removed: Run Diagnostics Button */}
                 {/* <Button onClick={handleDebug} variant="outline">
                   <Bug className="w-4 h-4 mr-2" />
                   Run Diagnostics
