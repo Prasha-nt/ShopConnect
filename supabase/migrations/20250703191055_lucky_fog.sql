@@ -24,7 +24,7 @@ including tables for users, shops, products, cart items, orders, and order items
 - Categorized products with stock tracking
 
 ### 4. Cart Items Table
-- Temporary storage for customer cart items
+- Temporary  for customer cart items
 - Links to products and sessions
 - Supports both authenticated and anonymous users
 

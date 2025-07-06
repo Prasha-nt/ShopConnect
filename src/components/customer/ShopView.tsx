@@ -1,32 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Plus, Minus, Phone, Mail, MapPin, Star } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Phone, Mail, MapPin, Star, ArrowLeft } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { CartView } from './CartView';
 import { getShopById, getProductsByShop } from '../../lib/supabase';
 import { useCartStore } from '../../stores/cartStore';
+import { useAuthStore } from '../../stores/authStore';
 import { Shop, Product } from '../../types';
 import { formatPrice } from '../../lib/utils';
 import toast from 'react-hot-toast';
 
 export const ShopView: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
+  const { user } = useAuthStore();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  const { addItem, items } = useCartStore();
+  const { addItem, items, loadCartFromDatabase } = useCartStore();
 
   useEffect(() => {
     if (shopId) {
       fetchShopData();
     }
   }, [shopId]);
+
+  useEffect(() => {
+    // Load cart from database if user is authenticated
+    if (user) {
+      loadCartFromDatabase(user.id);
+    }
+  }, [user, loadCartFromDatabase]);
 
   const fetchShopData = async () => {
     try {
@@ -39,15 +48,36 @@ export const ShopView: React.FC = () => {
       setShop(shopData);
       setProducts(productsData);
     } catch (error) {
+      console.error('Error fetching shop data:', error);
       toast.error('Failed to load shop data');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddToCart = (product: Product) => {
-    addItem(product, 1);
-    toast.success(`${product.title} added to cart!`);
+  const handleAddToCart = async (product: Product) => {
+    try {
+      // Check if product is in stock
+      if (product.stock <= 0) {
+        toast.error('Product is out of stock');
+        return;
+      }
+
+      // Check if adding one more would exceed stock
+      const existingItem = items.find(item => item.product_id === product.id);
+      const currentQuantity = existingItem ? existingItem.quantity : 0;
+      
+      if (currentQuantity >= product.stock) {
+        toast.error('Cannot add more items - stock limit reached');
+        return;
+      }
+
+      await addItem(product, 1);
+      toast.success(`${product.title} added to cart!`);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast.error('Failed to add item to cart');
+    }
   };
 
   const categories = ['all', ...new Set(products.map(p => p.category))];
@@ -73,7 +103,11 @@ export const ShopView: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Shop Not Found</h2>
-          <p className="text-gray-600">The shop you're looking for doesn't exist.</p>
+          <p className="text-gray-600 mb-4">The shop you're looking for doesn't exist.</p>
+          <Button onClick={() => window.history.back()}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Go Back
+          </Button>
         </div>
       </div>
     );
@@ -86,6 +120,13 @@ export const ShopView: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                onClick={() => window.history.back()}
+                className="p-2"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
               <img
                 src={shop.image_url || 'https://images.pexels.com/photos/1005644/pexels-photo-1005644.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1'}
                 alt={shop.name}
@@ -180,42 +221,72 @@ export const ShopView: React.FC = () => {
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
-            <motion.div
-              key={product.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="h-full hover:shadow-lg transition-shadow">
-                <img
-                  src={product.image_url || 'https://images.pexels.com/photos/1005644/pexels-photo-1005644.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&dpr=1'}
-                  alt={product.title}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">{product.title}</h3>
-                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">{product.description}</p>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-lg font-bold text-green-600">
-                      {formatPrice(product.price)}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
-                    </span>
+          {filteredProducts.map((product) => {
+            const cartItem = items.find(item => item.product_id === product.id);
+            const isInCart = !!cartItem;
+            const cartQuantity = cartItem?.quantity || 0;
+            const canAddMore = cartQuantity < product.stock;
+
+            return (
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Card className="h-full hover:shadow-lg transition-shadow">
+                  <div className="relative">
+                    <img
+                      src={product.image_url || 'https://images.pexels.com/photos/1005644/pexels-photo-1005644.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&dpr=1'}
+                      alt={product.title}
+                      className="w-full h-48 object-cover"
+                    />
+                    {product.stock === 0 && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <span className="text-white font-semibold">Out of Stock</span>
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    onClick={() => handleAddToCart(product)}
-                    className="w-full"
-                    disabled={product.stock === 0}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add to Cart
-                  </Button>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
+                  <div className="p-4">
+                    <h3 className="font-semibold text-gray-900 mb-2">{product.title}</h3>
+                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{product.description}</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-lg font-bold text-green-600">
+                        {formatPrice(product.price)}
+                      </span>
+                      <span className={`text-sm ${product.stock > 0 ? 'text-gray-500' : 'text-red-500'}`}>
+                        {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+                      </span>
+                    </div>
+                    
+                    {isInCart ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">In cart: {cartQuantity}</span>
+                        <Button
+                          onClick={() => handleAddToCart(product)}
+                          size="sm"
+                          disabled={!canAddMore}
+                          className="px-3"
+                        >
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add More
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => handleAddToCart(product)}
+                        className="w-full"
+                        disabled={product.stock === 0}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add to Cart
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              </motion.div>
+            );
+          })}
         </div>
 
         {filteredProducts.length === 0 && (

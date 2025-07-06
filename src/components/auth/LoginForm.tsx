@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { signIn } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface LoginFormData {
@@ -13,29 +13,59 @@ interface LoginFormData {
 }
 
 interface LoginFormProps {
-  onSuccess: () => void;
+  onSuccess: (role: string) => void; // Passed only after role verification
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  const { 
-    register, 
-    handleSubmit, 
+
+  const {
+    register,
+    handleSubmit,
     formState: { errors },
     clearErrors,
     trigger
-  } = useForm<LoginFormData>({
-    mode: 'onChange'
-  });
+  } = useForm<LoginFormData>({ mode: 'onChange' });
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      await signIn(data.email, data.password);
+      // Step 1: Sign in
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password
+      });
+
+      if (authError || !authData?.user) {
+        throw new Error(authError?.message || 'Login failed');
+      }
+
+      const userId = authData.user.id;
+
+      // Step 2: Fetch user role from database
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !userProfile) {
+        await supabase.auth.signOut();
+        throw new Error('Failed to fetch user role');
+      }
+
+      // Step 3: Check if selected role matches real role
+      if (userProfile.role !== data.role) {
+        await supabase.auth.signOut();
+        throw new Error(
+          `Invalid role selected. You're registered as a "${userProfile.role}".`
+        );
+      }
+
+      // ✅ Role matches — now allow navigation
       toast.success('Login successful!');
-      onSuccess();
+      onSuccess(userProfile.role); // Only after role is verified
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
     } finally {
@@ -44,8 +74,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (value && errors.email) {
+    if (e.target.value && errors.email) {
       clearErrors('email');
     }
   };
@@ -62,6 +91,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Email Field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Email Address
@@ -69,10 +99,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
           <input
             type="email"
             placeholder="Enter your email"
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
               errors.email ? 'border-red-500' : 'border-gray-300'
             }`}
-            {...register('email', { 
+            {...register('email', {
               required: 'Email is required',
               pattern: {
                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
@@ -85,49 +115,42 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             }}
             onBlur={() => trigger('email')}
           />
-          {errors.email && (
-            <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-          )}
+          {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>}
         </div>
 
+        {/* Password Field */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Password
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="Enter your password"
-              className={`w-full px-3 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+              className={`w-full px-3 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
                 errors.password ? 'border-red-500' : 'border-gray-300'
               }`}
-              {...register('password', { 
+              {...register('password', {
                 required: 'Password is required',
-                minLength: {
-                  value: 6,
-                  message: 'Password must be at least 6 characters'
-                }
+                minLength: { value: 6, message: 'Password must be at least 6 characters' }
               })}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
           {errors.password && (
-            <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+            <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
           )}
         </div>
 
+        {/* Role Select */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Sign in as
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Sign in as</label>
           <select
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
               errors.role ? 'border-red-500' : 'border-gray-300'
             }`}
             {...register('role', { required: 'Please select your role' })}
@@ -137,11 +160,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             <option value="shopkeeper">Shopkeeper</option>
             <option value="admin">Admin</option>
           </select>
-          {errors.role && (
-            <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>
-          )}
+          {errors.role && <p className="text-sm text-red-600 mt-1">{errors.role.message}</p>}
         </div>
 
+        {/* Submit Button */}
         <Button
           type="submit"
           className="w-full"

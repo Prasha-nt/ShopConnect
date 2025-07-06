@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Store, 
-  ShoppingBag, 
-  MapPin, 
-  Search, 
+import { useNavigate } from 'react-router-dom';
+import {
+  Store,
+  ShoppingBag,
+  ShoppingCart, // Added ShoppingCart icon
+  MapPin,
+  Search,
   Filter,
   Star,
   Clock,
@@ -25,10 +27,13 @@ import { supabase } from '../../lib/supabase';
 import { Shop, Order, Product } from '../../types';
 import { formatPrice, formatDate } from '../../lib/utils';
 import toast from 'react-hot-toast';
+import { CartView } from './CartView'; // Import your CartView component
 
 export const CustomerDashboard: React.FC = () => {
   const { user } = useAuthStore();
   const { items } = useCartStore();
+  const navigate = useNavigate();
+
   const [shops, setShops] = useState<Shop[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [favoriteShops, setFavoriteShops] = useState<string[]>([]);
@@ -38,6 +43,7 @@ export const CustomerDashboard: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isShopModalOpen, setIsShopModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false); // State for cart modal
   const [activeTab, setActiveTab] = useState<'discover' | 'orders' | 'favorites' | 'profile'>('discover');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -96,7 +102,7 @@ export const CustomerDashboard: React.FC = () => {
 
       if (error) throw error;
       setOrders(data || []);
-      
+
       // Calculate stats
       const totalOrders = data?.length || 0;
       const totalSpent = data?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
@@ -130,27 +136,27 @@ export const CustomerDashboard: React.FC = () => {
     const newFavorites = favoriteShops.includes(shopId)
       ? favoriteShops.filter(id => id !== shopId)
       : [...favoriteShops, shopId];
-    
+
     setFavoriteShops(newFavorites);
     localStorage.setItem('favoriteShops', JSON.stringify(newFavorites));
     setStats(prev => ({ ...prev, favoriteShops: newFavorites.length }));
-    
+
     toast.success(
-      favoriteShops.includes(shopId) 
-        ? 'Removed from favorites' 
+      favoriteShops.includes(shopId)
+        ? 'Removed from favorites'
         : 'Added to favorites'
     );
   };
 
   const categories = ['all', ...new Set(shops.map(shop => shop.category))];
-  
+
   const filteredShops = shops.filter(shop => {
     const matchesSearch = shop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         shop.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         shop.category.toLowerCase().includes(searchTerm.toLowerCase());
+                          shop.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          shop.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || shop.category === selectedCategory;
     const matchesFavorites = activeTab !== 'favorites' || favoriteShops.includes(shop.id);
-    
+
     return matchesSearch && matchesCategory && matchesFavorites;
   });
 
@@ -198,12 +204,12 @@ export const CustomerDashboard: React.FC = () => {
           </span>
         </div>
         <p className="text-gray-600 text-sm mb-3 line-clamp-2">{shop.description}</p>
-        
+
         <div className="flex items-center text-gray-500 text-sm mb-3">
           <MapPin className="w-4 h-4 mr-1" />
           <span className="truncate">{shop.address}</span>
         </div>
-        
+
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
             {[...Array(5)].map((_, i) => (
@@ -218,7 +224,7 @@ export const CustomerDashboard: React.FC = () => {
             {Math.floor(Math.random() * 50) + 10} products
           </span>
         </div>
-        
+
         <div className="flex space-x-2">
           <Button
             onClick={() => {
@@ -233,7 +239,8 @@ export const CustomerDashboard: React.FC = () => {
             View
           </Button>
           <Button
-            onClick={() => window.open(`/shop/${shop.id}`, '_blank')}
+            // Changed from window.open to navigate
+            onClick={() => navigate(`/shop/${shop.id}`)}
             className="flex-1"
             size="sm"
           >
@@ -264,7 +271,7 @@ export const CustomerDashboard: React.FC = () => {
           </span>
         </div>
       </div>
-      
+
       <div className="flex items-center justify-between text-sm text-gray-500">
         <span>{formatDate(order.created_at)}</span>
         <Button
@@ -308,12 +315,19 @@ export const CustomerDashboard: React.FC = () => {
               </h1>
               <p className="text-gray-600">Discover local shops and manage your orders</p>
             </div>
-            {cartItemCount > 0 && (
-              <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg">
-                <ShoppingBag className="w-4 h-4 inline mr-2" />
-                {cartItemCount} items in cart
-              </div>
-            )}
+            {/* Cart Button */}
+            <Button
+              onClick={() => setIsCartOpen(true)}
+              className="relative"
+            >
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Cart
+              {cartItemCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {cartItemCount}
+                </span>
+              )}
+            </Button>
           </div>
         </motion.div>
 
@@ -555,9 +569,10 @@ export const CustomerDashboard: React.FC = () => {
 
               <div className="flex space-x-3 pt-4">
                 <Button
+                  // Changed from window.open to navigate
                   onClick={() => {
-                    window.open(`/shop/${selectedShop.id}`, '_blank');
-                    setIsShopModalOpen(false);
+                    navigate(`/shop/${selectedShop.id}`);
+                    setIsShopModalOpen(false); // Close modal after navigation
                   }}
                   className="flex-1"
                 >
@@ -636,6 +651,15 @@ export const CustomerDashboard: React.FC = () => {
               </div>
             </div>
           )}
+        </Modal>
+
+        {/* Cart View Modal */}
+        <Modal
+          isOpen={isCartOpen}
+          onClose={() => setIsCartOpen(false)}
+          title="Your Cart"
+        >
+          <CartView onClose={() => setIsCartOpen(false)} />
         </Modal>
       </div>
     </div>
